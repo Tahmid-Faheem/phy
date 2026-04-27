@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wave Phase Lab - Corrected Y-Axis</title>
+    <style>
+        :root {
+            --primary: #38bdf8;
+            --secondary: #f472b6;
+            --bg: #0f172a;
+            --panel: rgba(30, 41, 59, 0.95);
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg);
+            color: white;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas { display: block; width: 100vw; height: 100vh; }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            width: 90%;
+            max-width: 420px;
+            background: var(--panel);
+            padding: 20px;
+            border-radius: 24px;
+            backdrop-filter: blur(10px);
+            border: 1px solid #334155;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        }
+
+        .type-toggle {
+            display: flex;
+            background: #0f172a;
+            padding: 4px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .type-toggle button {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .type-toggle button.active {
+            background: var(--primary);
+            color: #0f172a;
+        }
+
+        .control-group { margin-bottom: 15px; }
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 8px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .value-readout { color: var(--primary); font-weight: bold; }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 6px; background: #334155; border-radius: 3px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 22px; width: 22px; border-radius: 50%;
+            background: var(--primary); margin-top: -8px;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+            cursor: pointer;
+        }
+
+        .phase-math {
+            text-align: center;
+            font-size: 1.2rem;
+            padding-top: 10px;
+            border-top: 1px solid #334155;
+        }
+
+        .formula {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="waveCanvas"></canvas>
+
+    <div class="controls">
+        <div class="type-toggle">
+            <button id="btnSin" class="active" onclick="setWaveType('sin')">SINE</button>
+            <button id="btnCos" onclick="setWaveType('cos')">COSINE</button>
+        </div>
+
+        <div class="formula" id="formula-text">y = A sin(x + δ)</div>
+
+        <div class="control-group">
+            <label>Phase Shift (δ) <span id="rad-val" class="value-readout">0.00 rad</span></label>
+            <input type="range" id="phaseSlider" min="0" max="6.283" step="0.01" value="0">
+        </div>
+
+        <div class="control-group">
+            <label>Amplitude <span id="amp-val" class="value-readout">60</span></label>
+            <input type="range" id="ampSlider" min="10" max="180" step="1" value="60">
+        </div>
+
+        <div class="phase-math" id="pi-fraction">δ = 0π</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        const phaseSlider = document.getElementById('phaseSlider');
+        const ampSlider = document.getElementById('ampSlider');
+        
+        let waveType = 'sin'; 
+        let width, height, centerY;
+        const startLineX = 140; 
+        const pixelsPerRad = 70;
+
+        function setWaveType(type) {
+            waveType = type;
+            document.getElementById('btnSin').classList.toggle('active', type === 'sin');
+            document.getElementById('btnCos').classList.toggle('active', type === 'cos');
+            document.getElementById('formula-text').innerText = `y = A ${type}(x + δ)`;
+            draw();
+        }
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            centerY = height / 2.5;
+            draw();
+        }
+
+        function getPiFraction(val) {
+            const fraction = val / Math.PI;
+            if (fraction < 0.05) return "0";
+            if (Math.abs(fraction - 0.5) < 0.05) return "1/2 π";
+            if (Math.abs(fraction - 1) < 0.05) return "π";
+            if (Math.abs(fraction - 1.5) < 0.05) return "3/2 π";
+            if (Math.abs(fraction - 2) < 0.05) return "2π";
+            return `${fraction.toFixed(2)}π`;
+        }
+
+        function draw() {
+            const delta = parseFloat(phaseSlider.value);
+            const amplitude = parseFloat(ampSlider.value);
+
+            document.getElementById('rad-val').innerText = `${delta.toFixed(2)} rad`;
+            document.getElementById('amp-val').innerText = amplitude;
+            document.getElementById('pi-fraction').innerHTML = `δ = <span style="color:#38bdf8">${getPiFraction(delta)}</span>`;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // 1. Grid Lines (Horizontal Baseline)
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, centerY); ctx.lineTo(width, centerY);
+            ctx.stroke();
+
+            // 2. Reference Line (Vertical)
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.setLineDash([5, 8]);
+            ctx.beginPath();
+            ctx.moveTo(startLineX, 0); ctx.lineTo(startLineX, height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 3. Draw Wave
+            ctx.beginPath();
+            ctx.strokeStyle = waveType === 'sin' ? '#38bdf8' : '#f472b6';
+            ctx.lineWidth = 6;
+
+            for (let x = 0; x < width; x++) {
+                const angle = (x - startLineX) / pixelsPerRad + delta;
+                const funcValue = waveType === 'sin' ? Math.sin(angle) : Math.cos(angle);
+                
+                // THE FIX: Subtract funcValue * amplitude to invert the Y-axis
+                const y = centerY - (funcValue * amplitude);
+                
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // 4. Marker: Phase = 0 Point (Origin Point)
+            const zeroX = startLineX - (delta * pixelsPerRad);
+            ctx.fillStyle = '#f87171';
+            ctx.beginPath();
+            
+            // For Cosine at Phase 0, the marker should be at the peak (Positive Y)
+            const markerYOffset = waveType === 'cos' ? -amplitude : 0;
+            ctx.arc(zeroX, centerY + markerYOffset, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillText(waveType.toUpperCase() + " ORIGIN", zeroX - 45, centerY + markerYOffset - 20);
+
+            // 5. Intersection Circle at the Start Line
+            const currentFunc = waveType === 'sin' ? Math.sin(delta) : Math.cos(delta);
+            const intersectY = centerY - (currentFunc * amplitude);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(startLineX, intersectY, 10, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        phaseSlider.addEventListener('input', draw);
+        ampSlider.addEventListener('input', draw);
+        window.addEventListener('resize', resize);
+        resize();
+    </script>
+</body>
+</html>
